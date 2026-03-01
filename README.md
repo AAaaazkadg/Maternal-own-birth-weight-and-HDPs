@@ -10,12 +10,11 @@ We employed an integrated analytical framework combining:
 ```
 Maternal-own-birth-weight-and-HDPs/
 ├── scripts/
-│ ├── 01_nested_case_control.R # Observational analysis (conditional logistic regression, RCS)
-│ ├── 02_mr_analysis.R # Two-sample MR (IVW, weighted median, MR-Egger)
-│ ├── 03_mr_clust.R # MR-Clust analysis for heterogeneous effects
-│ ├── 04_mr_mediation.R # Mediation analysis (childhood BMI)
-│ ├── 05_sensitivity.R # Sensitivity analyses (MR-PRESSO, leave-one-out)
-│ └── 06_visualization.R # Generate figures (RCS plots, forest plots)
+│ ├── 01_clump and remove SNPs_BW.R
+│ ├── 02_TwoSampleMR_BW to GH and PE.R
+│ ├── 03_Cluster_BW_GH.R
+│ ├── 04_TwoSampleMR_BW to CBMI.R
+│ └── 05_MVMR.R
 ├── data/
 │ ├── DataAvailability.md # Instructions for obtaining GWAS data
 └── README.md

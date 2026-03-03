@@ -1,0 +1,164 @@
+library(readxl)
+data<-read_excel("C:/Users/quany/Desktop/原始数据.xlsx")
+View(data)
+data$smoke<-NULL
+data$alcohol<-NULL
+library(dplyr)
+data<-data%>%
+  mutate(eduction=na_if(eduction,99))
+table(data$eduction,useNA="always")
+data$eduction[is.na(data$eduction)]<-5
+data<-data%>%
+  mutate(income=na_if(income,99))
+table(data$income,useNA="always")
+data$income[is.na(data$income)]<-6
+data<-data%>%
+  mutate(parity=na_if(parity,99))
+table(data$parity,useNA="always")
+data$parity[is.na(data$parity)]<-0
+data<-data%>%
+  mutate(bthweigt=na_if(bthweigt,9999))
+table(data$bthweigt,useNA="always")
+data_complete<-data%>%
+  filter(!is.na(bthweigt))
+sd(data_complete$bthweigt)
+data<-data%>%
+  mutate(bthwtg=na_if(bthwtg,99))
+table(data$bthwtg,useNA="always")
+data$bthwtg[is.na(data$bthwtg)]<-2
+table(data$bthwtg,useNA="always")
+library(mice)
+md.pattern(data)
+imputed_data<-mice(data,m=5,maxit=10,seed=123)
+plot(imputed_data)
+summary(imputed_data)
+complete_data<-complete(imputed_data,action=1)
+View(complete_data)
+complete_data<-complete_data%>%
+  mutate(bthwtg=case_when(
+    bthweigt<2500~1,
+    bthweigt>=2500&bthweigt<=4000~2,
+    bthweigt>4000~3
+  ))
+data_pe<-read_excel("C:/Users/quany/Desktop/precise_PE_matched4_clinical.xlsx")
+View(data_pe)
+data_gh<-read_excel("C:/Users/quany/Desktop/Real_HDPs_matched4_clinical.xlsx")
+View(data_gh)
+table(data_pe$group)
+table(data_gh$group)
+case_control_pe<-read.table("precise_PE_matched4.txt", 
+                            header=TRUE,
+                            sep="", 
+                            col.names=c("Case_ID","Control_ID"),
+                            stringsAsFactors=FALSE)
+View(case_control_pe)
+case_control_pe<-case_control_pe%>%
+  group_by(Case_ID)%>%
+  mutate(subclass=cur_group_id())%>% 
+  ungroup() 
+print(case_control_pe)
+library(tidyr)
+case_control_pe<-case_control_pe%>%
+  pivot_longer(cols=c("Case_ID","Control_ID"), 
+               names_to="type", 
+               values_to="ID")%>%
+  select(ID,subclass)%>%
+  distinct() 
+View(case_control_pe)
+data$match<-data$ID%in%case_control_pe$ID
+data_sure<-data[data$match==TRUE,]
+View(data_sure)
+data_sure$match<-NULL
+data_sure<-data_sure%>%
+  left_join(
+    case_control_pe%>%
+      select(ID,subclass),
+    by="ID"
+  )
+View(data_sure)
+data_pe_case<-data_pe[data_pe$group=="case",]
+data_sure$match<-data_sure$ID%in%data_pe_case$ID
+data_sure$group<-ifelse(data_sure$match==TRUE,1,0)
+data_sure$match<-NULL
+View(data_sure)
+table(data_sure$group)
+case_control_gh<-read.table("Real_HDPs_matched4.txt", 
+                            header=TRUE,
+                            sep="", 
+                            col.names=c("Case_ID","Control_ID"),
+                            stringsAsFactors=FALSE)
+View(case_control_gh)
+case_control_gh<-case_control_gh%>%
+  group_by(Case_ID)%>%
+  mutate(subclass=cur_group_id())%>% 
+  ungroup() 
+print(case_control_gh)
+case_control_gh<-case_control_gh%>%
+  pivot_longer(cols=c("Case_ID","Control_ID"), 
+               names_to="type", 
+               values_to="ID")%>%
+  select(ID,subclass)%>%
+  distinct() 
+View(case_control_gh)
+data$match<-data$ID%in%case_control_gh$ID
+data_Sure<-data[data$match==TRUE,]
+View(data_Sure)
+data_Sure$match<-NULL
+data_Sure<-data_Sure%>%
+  left_join(
+    case_control_gh%>%
+      select(ID,subclass),
+    by="ID"
+  )
+View(data_Sure)
+data_gh_case<-data_gh[data_gh$group=="case",]
+data_Sure$match<-data_Sure$ID%in%data_gh_case$ID
+data_Sure$group<-ifelse(data_Sure$match==TRUE,1,0)
+data_Sure$match<-NULL
+View(data_Sure)
+table(data_Sure$group)
+library(survival)
+data_sure$bthwtg<-factor(data_sure$bthwtg,ordered=FALSE)
+data_sure$bthwtg<-relevel(data_sure$bthwtg,ref="2")
+model_PE0<-clogit(
+  group~bthwtg+strata(subclass),
+  data=data_sure
+)
+summary(model_PE0)
+data_Sure$bthwtg<-factor(data_Sure$bthwtg,ordered=FALSE)
+data_Sure$bthwtg<-relevel(data_Sure$bthwtg,ref="2")
+model_GH0<-clogit(
+  group~bthwtg+strata(subclass),
+  data=data_Sure
+)
+summary(model_GH0)
+model_PE1<-clogit(
+  group~bthwtg+eduction+strata(subclass),
+  data=data_sure
+)
+summary(model_PE1)
+model_PE2<-clogit(
+  group~bthwtg+eduction+income+strata(subclass),
+  data=data_sure
+)
+summary(model_PE2)
+model_PE3<-clogit(
+  group~bthwtg+eduction+income+parity+strata(subclass),
+  data=data_sure
+)
+summary(model_PE3)
+model_GH1<-clogit(
+  group~bthwtg+eduction+strata(subclass),
+  data=data_Sure
+)
+summary(model_GH1)
+model_GH2<-clogit(
+  group~bthwtg+eduction+income+strata(subclass),
+  data=data_Sure
+)
+summary(model_GH2)
+model_GH3<-clogit(
+  group~bthwtg+eduction+income+parity+strata(subclass),
+  data=data_Sure
+)
+summary(model_GH3)

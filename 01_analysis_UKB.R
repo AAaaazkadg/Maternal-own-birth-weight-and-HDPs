@@ -1,0 +1,492 @@
+library(readxl)
+data1<-read_excel("C:/Users/quany/Desktop/zxc_data1_participant.xlsx")
+data2<-read_excel("C:/Users/quany/Desktop/zxc_data2_participant.xlsx")  
+data<-merge(data1,data2,by="eid",all=TRUE)
+View(data)
+names(data)[150:307]<-paste0("p41280_a",101:258)
+library(dplyr)
+data<-data%>%
+  mutate(across(where(is.character),~ifelse(.=="Not known",NA,.)))
+data<-data%>%
+  mutate(BirthWeight=coalesce(p20022_i0,p20022_i1,p20022_i2))
+summary(data$BirthWeight)
+data$BirthWeight[is.na(data$BirthWeight)]<-3.32
+data$BirthWeight<-data$BirthWeight*1000
+summary(data$BirthWeight)
+data<-data%>%
+  rename(ICDcode=p41270)
+library(stringr)
+pregnancy<-"Z37\\.(0|1)"
+data<-data%>%
+  filter(str_detect(ICDcode,pregnancy))
+View(data)
+get_race_category<-function(x){
+  case_when(
+    x%in%c("Any other white background","British","Irish","White")~"white",
+    x%in%c("white and black caribbean","White and Black African","White and Asian","Any other mixed background")~"mix",
+    x%in%c("Chinese","Bangladeshi","Asian or Asian British","Pakistani","Any other Asian background")~"Asian",
+    x%in%c("African","Caribbean","Black or Black British","Any other Black background")~"black",
+    x=="Other ethnic group"~"other",
+    TRUE~NA_character_
+  )
+}
+data<-data%>%
+  mutate(
+    race=case_when(
+      !(p21000_i0%in%c("Do not know","Prefer not to answer"))~get_race_category(p21000_i0),
+      !(p21000_i1%in%c("Do not know","Prefer not to answer"))~get_race_category(p21000_i1),
+      !(p21000_i2%in%c("Do not know","Prefer not to answer"))~get_race_category(p21000_i2),
+      !(p21000_i3%in%c("Do not know","Prefer not to answer"))~get_race_category(p21000_i3),
+      TRUE~"none"
+    )
+  )
+table(data$race,useNA="always")
+data$race<-ifelse(is.na(data$race),"white",data$race)
+table(data$race,useNA="always")
+data_PE<-data%>%
+  filter(grepl("O14",ICDcode))
+data_GH<-data%>%
+  filter(grepl("O13",ICDcode))
+View(data_PE)
+View(data_GH)
+data_GH$match<-data_GH$eid%in%data_PE$eid
+data_both<-data_GH[data_GH$match==TRUE,]
+View(data_both)
+target_icd_PE<-"O14"
+unwanted_icd_PE<-"O13"
+days_threshold_PE<-182 
+keep_rows_PE<-logical(nrow(data_both))
+for(i in 1:nrow(data_both)){  
+  icds<-unlist(strsplit(data_both$ICDcode[i],"\\|"))  
+  target_pos_PE<-which(startsWith(icds,target_icd_PE))  
+  unwanted_pos_PE<-which(startsWith(icds,unwanted_icd_PE))  
+  if(length(target_pos_PE)>0&&length(unwanted_pos_PE)>0){  
+    target_date_vars<-paste0("p41280_a",target_pos_PE-1)  
+    unwanted_date_vars<-paste0("p41280_a",unwanted_pos_PE-1)  
+    target_dates_PE<-as.Date(as.character(data_both[i,target_date_vars]),format="%Y-%m-%d")  
+    unwanted_dates_PE<-as.Date(as.character(data_both[i,unwanted_date_vars]),format="%Y-%m-%d")  
+    target_dates_PE[is.na(target_dates_PE)]<-as.Date(NA)  
+    unwanted_dates_PE[is.na(unwanted_dates_PE)]<-as.Date(NA)  
+    date_diffs<-outer(target_dates_PE,unwanted_dates_PE,"-")  
+    if (any(date_diffs>days_threshold_PE,na.rm=TRUE)){  
+      keep_rows_PE[i]<-TRUE 
+    }  
+  }  
+}  
+filtered_data_PE<-data_both[keep_rows_PE,]  
+View(filtered_data_PE)
+target_icd_GH<-"O13"
+unwanted_icd_GH<-"O14"
+days_threshold_GH<-224 
+keep_rows_GH<-logical(nrow(data_both))
+for(i in 1:nrow(data_both)){  
+  icds<-unlist(strsplit(data_both$ICDcode[i],"\\|"))  
+  target_pos_GH<-which(startsWith(icds,target_icd_GH))  
+  unwanted_pos_GH<-which(startsWith(icds,unwanted_icd_GH))  
+  if(length(target_pos_GH)>0&&length(unwanted_pos_GH)>0){  
+    target_date_vars<-paste0("p41280_a",target_pos_GH-1)  
+    unwanted_date_vars<-paste0("p41280_a",unwanted_pos_GH-1)  
+    target_dates_GH<-as.Date(as.character(data_both[i,target_date_vars]),format="%Y-%m-%d")  
+    unwanted_dates_GH<-as.Date(as.character(data_both[i,unwanted_date_vars]),format="%Y-%m-%d")  
+    target_dates_GH[is.na(target_dates_GH)]<-as.Date(NA)  
+    unwanted_dates_GH[is.na(unwanted_dates_GH)]<-as.Date(NA)  
+    date_diffs<-outer(target_dates_GH,unwanted_dates_GH,"-")  
+    if (any(date_diffs>days_threshold_GH,na.rm=TRUE)){  
+      keep_rows_GH[i]<-TRUE 
+    }  
+  }  
+}  
+filtered_data_GH<-data_both[keep_rows_GH,]  
+View(filtered_data_GH)
+data_PE$match<-data_PE$eid%in%filtered_data_PE$eid
+data_PE<-data_PE[data_PE$match==FALSE,]
+data_GH$match<-data_GH$eid%in%filtered_data_GH$eid
+data_GH<-data_GH[data_GH$match==FALSE,]
+data_Xiaoyue<-read.csv("intermediate_cohort_after_6_2.csv")
+View(data_Xiaoyue)
+data_Xiaoyue_gh<-data_Xiaoyue[data_Xiaoyue$Group=="GH",]
+View(data_Xiaoyue_gh)
+data_GH$match<-data_GH$eid%in%data_Xiaoyue_gh$Participant.ID
+table(data_GH$match)
+data_GH<-data_GH[data_GH$match==TRUE,]
+data_PE$case<-1
+data_GH$case<-1
+data_control<-data%>% 
+  filter(!grepl("O10|O11|O12|O13|O14|O15|O16",ICDcode))
+data_control$case<-0
+View(data_control)
+find_z37_position<-function(icd_string){
+  codes<-unlist(strsplit(icd_string,"\\|"))
+  positions<-grep("Z37",codes)
+  if(length(positions)== 0){
+    return(NA)
+  }else{
+    return(positions)
+  }
+}
+data_PE$Z37_position<-sapply(data_PE$ICDcode,find_z37_position)
+find_z37_position1<-function(icd_string){
+  codes<-unlist(strsplit(icd_string,"\\|"))
+  positions<-grep("Z37",codes)
+  if(length(positions)== 0){
+    return(NA)
+  }else{
+    return(positions[1])
+  }
+}
+data_PE$Z37_position1<-sapply(data_PE$ICDcode,find_z37_position1)
+data_PE$age<-NA
+for(i in 1:nrow(data_PE)){
+  pos<-data_PE$Z37_position1[i]
+  if(!is.na(pos)){
+    var_name<-paste0("p41280_a",pos-1) 
+    if(var_name%in%names(data_PE)){
+      data_PE$age[i]<-data_PE[[var_name]][i]
+    }else{
+      data_PE$age[i]<-NA
+      warning(paste("Variable",var_name,"not found in data_control for row",i))
+    }
+  }
+}
+data_PE$age<-data_PE$age/31536000
+data_PE$age<-data_PE$age+1970
+data_PE$age<-round(data_PE$age)
+table(data_PE$age,useNA="always")
+data_PE$age<-data_PE$age-data_PE$p34
+find_z37_position<-function(icd_string){
+  codes<-unlist(strsplit(icd_string,"\\|"))
+  positions<-grep("Z37",codes)
+  if(length(positions)== 0){
+    return(NA)
+  }else{
+    return(positions)
+  }
+}
+data_GH$Z37_position<-sapply(data_GH$ICDcode,find_z37_position)
+find_z37_position1<-function(icd_string){
+  codes<-unlist(strsplit(icd_string,"\\|"))
+  positions<-grep("Z37",codes)
+  if(length(positions)== 0){
+    return(NA)
+  }else{
+    return(positions[1])
+  }
+}
+data_GH$Z37_position1<-sapply(data_GH$ICDcode,find_z37_position1)
+data_GH$age<-NA
+for(i in 1:nrow(data_GH)){
+  pos<-data_GH$Z37_position1[i]
+  if(!is.na(pos)){
+    var_name<-paste0("p41280_a",pos-1) 
+    if(var_name%in%names(data_GH)){
+      data_GH$age[i]<-data_GH[[var_name]][i]
+    }else{
+      data_GH$age[i]<-NA
+      warning(paste("Variable",var_name,"not found in data_control for row",i))
+    }
+  }
+}
+data_GH$age<-data_GH$age/31536000
+data_GH$age<-data_GH$age+1970
+data_GH$age<-round(data_GH$age)
+table(data_GH$age,useNA="always")
+data_GH$age<-data_GH$age-data_GH$p34
+find_z37_position<-function(icd_string){
+  codes<-unlist(strsplit(icd_string,"\\|"))
+  positions<-grep("Z37",codes)
+  if(length(positions)== 0){
+    return(NA)
+  }else{
+    return(positions)
+  }
+}
+data_control$Z37_position<-sapply(data_control$ICDcode,find_z37_position)
+find_z37_position1<-function(icd_string){
+  codes<-unlist(strsplit(icd_string,"\\|"))
+  positions<-grep("Z37",codes)
+  if(length(positions)== 0){
+    return(NA)
+  }else{
+    return(positions[1])
+  }
+}
+data_control$Z37_position1<-sapply(data_control$ICDcode,find_z37_position1)
+data_control$age<-NA
+for(i in 1:nrow(data_control)){
+  pos<-data_control$Z37_position1[i]
+  if(!is.na(pos)){
+    var_name<-paste0("p41280_a",pos-1) 
+    if(var_name%in%names(data_control)){
+      data_control$age[i]<-data_control[[var_name]][i]
+    }else{
+      data_control$age[i]<-NA
+      warning(paste("Variable",var_name,"not found in data_control for row",i))
+    }
+  }
+}
+data_control$age<-data_control$age/31536000
+data_control$age<-data_control$age+1970
+data_control$age<-round(data_control$age)
+table(data_control$age,useNA="always")
+na_rows<-which(is.na(data_control$age))
+print(na_rows)
+data_control<-data_control[!is.na(data_control$age),]
+data_control$age<-data_control$age-data_control$p34
+data_PE$match<-NULL
+data_GH$match<-NULL
+data_pe<-rbind(data_PE,data_control)
+data_gh<-rbind(data_GH,data_control)
+View(data_pe)
+View(data_gh)
+library(MatchIt)
+data_pe_match<-matchit(
+  case~age,
+  data=data_pe,
+  method="nearest",
+  ratio=4,
+  caliper=2,
+  replace=FALSE 
+)
+data_pe_matched<-match.data(data_pe_match)
+View(data_pe_matched)
+summary(data_pe_matched)
+data_pe_check<-data_pe_matched[data_pe_matched$case==1,]
+View(data_pe_check)
+t.test(age~case,data=data_pe_matched)
+data_gh_match<-matchit(
+  case~age,
+  data=data_gh,
+  method="nearest",
+  ratio=4,
+  caliper=2,
+  replace=FALSE 
+)
+data_gh_matched<-match.data(data_gh_match)
+View(data_gh_matched)
+summary(data_gh_matched)
+data_gh_check<-data_gh_matched[data_gh_matched$case==1,]
+View(data_gh_check)
+t.test(age~case,data=data_gh_matched)
+library(survival)
+data_pe0<-data_pe_matched%>%
+  select(eid,BirthWeight,case,age,subclass)
+data_gh0<-data_gh_matched%>%
+  select(eid,BirthWeight,case,age,subclass)
+data_pe1<-data_pe_matched%>%
+  select(eid,BirthWeight,case,age,race,subclass)
+data_gh1<-data_gh_matched%>%
+  select(eid,BirthWeight,case,age,race,subclass)
+vars<-c("age","BirthWeight")
+catVars<-NULL
+library(tableone)
+matched_table<-CreateTableOne(
+  vars=vars,
+  strata="case",
+  data=data_pe0,
+  factorVars=catVars
+)
+print(matched_table,smd=TRUE,showAllLevels=TRUE)
+matched_table<-CreateTableOne(
+  vars=vars,
+  strata="case",
+  data=data_gh0,
+  factorVars=catVars
+)
+print(matched_table,smd=TRUE,showAllLevels=TRUE)
+logistics_pe0<-clogit(
+  case~BirthWeight+strata(subclass),
+  data=data_pe0
+)
+summary(logistics_pe0)
+data_pe0$BirthWeight_500g<-data_pe0$BirthWeight/500
+logistics_pe0000<-clogit(
+  case~BirthWeight_500g+strata(subclass),
+  data=data_pe0
+)
+summary(logistics_pe0000)
+data_pe1$BirthWeight_500g<-data_pe1$BirthWeight/500
+logistics_pe1000<-clogit(
+  case~BirthWeight_500g+race+strata(subclass),
+  data=data_pe1
+)
+summary(logistics_pe1000)
+logistics_gh0<-clogit(
+  case~BirthWeight+strata(subclass),
+  data=data_gh0
+)
+summary(logistics_gh0)
+data_gh0$BirthWeight_500g<-data_gh0$BirthWeight/500
+logistics_gh0000<-clogit(
+  case~BirthWeight_500g+strata(subclass),
+  data=data_gh0
+)
+summary(logistics_gh0000) 
+data_gh1$BirthWeight_500g<-data_gh1$BirthWeight/500
+logistics_gh1000<-clogit(
+  case~BirthWeight_500g+race+strata(subclass),
+  data=data_gh1
+)
+summary(logistics_gh1000)
+library(Hmisc)
+library(rms)
+library(ggplot2)
+range(data_pe1$BirthWeight)
+quantile(data_pe1$BirthWeight,probs=c(0.25,0.75))
+dd<-datadist(data_pe1)
+options(datadist="dd")
+rcs_pe3<-lrm(case~rcs(BirthWeight,3)+race+strat(subclass),data=data_pe1)
+summary(rcs_pe3)
+anova(rcs_pe3)
+pred_pe<-Predict(rcs_pe3,BirthWeight,ref.zero=TRUE,fun=exp)
+ggplot(pred_pe,aes(x=BirthWeight,y=yhat))+ 
+  geom_line(size=1.5,color="#AD002AFF")+ 
+  geom_ribbon(aes(ymin=lower,ymax=upper),alpha=0.2,fill="#925E9FFF")+
+  geom_hline(yintercept=1,linetype="dashed")+ 
+  labs(x="Mother's Birth Weight (g)", 
+       y="Odds Ratio (95% CI)", 
+       title="Association between Mother's Birth Weight and Preeclampsia Risk(3)")+
+  theme_bw()+
+  theme(plot.title=element_text(hjust=0.5))
+rcs_pe4<-lrm(case~rcs(BirthWeight,4)+race+strat(subclass),data=data_pe1)
+summary(rcs_pe4)
+anova(rcs_pe4)
+pred_pe<-Predict(rcs_pe4,BirthWeight,ref.zero=TRUE,fun=exp)
+ggplot(pred_pe,aes(x=BirthWeight,y=yhat))+ 
+  geom_line(size=1.5,color="#AD002AFF")+ 
+  geom_ribbon(aes(ymin=lower,ymax=upper),alpha=0.2,fill="#925E9FFF")+
+  geom_hline(yintercept=1,linetype="dashed")+ 
+  labs(x="Mother's Birth Weight (g)", 
+       y="Odds Ratio (95% CI)", 
+       title="Association between Mother's Birth Weight and Preeclampsia Risk(4)")+
+  theme_bw()+
+  theme(plot.title=element_text(hjust=0.5))
+rcs_pe5<-lrm(case~rcs(BirthWeight,5)+race+strat(subclass),data=data_pe1)
+summary(rcs_pe5)
+anova(rcs_pe5)
+pred_pe<-Predict(rcs_pe5,BirthWeight,ref.zero=TRUE,fun=exp)
+ggplot(pred_pe,aes(x=BirthWeight,y=yhat))+ 
+  geom_line(size=1.5,color="#AD002AFF")+ 
+  geom_ribbon(aes(ymin=lower,ymax=upper),alpha=0.2,fill="#925E9FFF")+
+  geom_hline(yintercept=1,linetype="dashed")+ 
+  labs(x="Mother's Birth Weight (g)", 
+       y="Odds Ratio (95% CI)", 
+       title="Association between Mother's Birth Weight and Preeclampsia Risk(5)")+
+  theme_bw()+
+  theme(plot.title=element_text(hjust=0.5))
+AIC(rcs_pe3)
+AIC(rcs_pe4)
+AIC(rcs_pe5)
+lrtest(rcs_pe3,rcs_pe4)
+lrtest(rcs_pe4,rcs_pe5)
+options(datadist="dd")
+dd<-datadist(data_gh1)
+range(data_gh1$BirthWeight)
+quantile(data_gh1$BirthWeight,probs=c(0.25,0.75))
+rcs_gh3<-lrm(case~rcs(BirthWeight,3)+race+strat(subclass),data=data_gh1)
+summary(rcs_gh3)
+anova(rcs_gh3)
+pred_gh<-Predict(rcs_gh3,BirthWeight,ref.zero=TRUE,fun=exp)
+ggplot(pred_gh,aes(x=BirthWeight,y=yhat))+ 
+  geom_line(size=1.5,color="#AD002AFF")+ 
+  geom_ribbon(aes(ymin=lower,ymax=upper),alpha=0.2,fill="#925E9FFF")+
+  geom_hline(yintercept=1,linetype="dashed")+ 
+  labs(x="Mother's Birth Weight (g)", 
+       y="Odds Ratio (95% CI)", 
+       title="Association between Mother's Birth Weight and Gestational hypertension Risk(3)")+
+  theme_bw()+
+  theme(plot.title=element_text(hjust=0.5))
+rcs_gh4<-lrm(case~rcs(BirthWeight,4)+race+strat(subclass),data=data_gh1)
+summary(rcs_gh4)
+anova(rcs_gh4)
+pred_gh<-Predict(rcs_gh4,BirthWeight,ref.zero=TRUE,fun=exp)
+ggplot(pred_gh,aes(x=BirthWeight,y=yhat))+ 
+  geom_line(size=1.5,color="#AD002AFF")+ 
+  geom_ribbon(aes(ymin=lower,ymax=upper),alpha=0.2,fill="#925E9FFF")+
+  geom_hline(yintercept=1,linetype="dashed")+ 
+  labs(x="Mother's Birth Weight (g)", 
+       y="Odds Ratio (95% CI)", 
+       title="Association between Mother's Birth Weight and Gestational hypertension Risk(4)")+
+  theme_bw()+
+  theme(plot.title=element_text(hjust=0.5))
+rcs_gh5<-lrm(case~rcs(BirthWeight,5)+race+strat(subclass),data=data_gh1)
+summary(rcs_gh5)
+anova(rcs_gh5)
+pred_gh<-Predict(rcs_gh5,BirthWeight,ref.zero=TRUE,fun=exp)
+ggplot(pred_gh,aes(x=BirthWeight,y=yhat))+ 
+  geom_line(size=1.5,color="#AD002AFF")+ 
+  geom_ribbon(aes(ymin=lower,ymax=upper),alpha=0.2,fill="#925E9FFF")+
+  geom_hline(yintercept=1,linetype="dashed")+ 
+  labs(x="Mother's Birth Weight (g)", 
+       y="Odds Ratio (95% CI)", 
+       title="Association between Mother's Birth Weight and Gestational hypertension Risk(5)")+
+  theme_bw()+
+  theme(plot.title=element_text(hjust=0.5))
+AIC(rcs_gh3)
+AIC(rcs_gh4)
+AIC(rcs_gh5)
+lrtest(rcs_gh3,rcs_gh4)
+lrtest(rcs_gh4,rcs_gh5)
+data_preeclampsia<-data_pe0%>%
+  mutate(BirthWeight=case_when(
+    BirthWeight<2500~"low",
+    BirthWeight>=2500&BirthWeight<=2999~"lownormal",
+    BirthWeight>=3000&BirthWeight<=3499~"normal",
+    BirthWeight>=3500&BirthWeight<=4000~"highnormal",
+    BirthWeight>4000~"high"
+  ))
+table(data_preeclampsia$BirthWeight)
+data_preeclampsia$BirthWeight<-factor(data_preeclampsia$BirthWeight,ordered=FALSE)
+data_preeclampsia$BirthWeight<-relevel(data_preeclampsia$BirthWeight,ref="normal")
+logistics_preeclampsia<-clogit(
+  case~BirthWeight+strata(subclass),
+  data=data_preeclampsia
+)
+summary(logistics_preeclampsia)
+data_preeclampsia1<-data_pe1%>%
+  mutate(BirthWeight=case_when(
+    BirthWeight<2500~"low",
+    BirthWeight>=2500&BirthWeight<=2999~"lownormal",
+    BirthWeight>=3000&BirthWeight<=3499~"normal",
+    BirthWeight>=3500&BirthWeight<=4000~"highnormal",
+    BirthWeight>4000~"high"
+  ))
+table(data_preeclampsia1$BirthWeight)
+data_preeclampsia1$BirthWeight<-factor(data_preeclampsia1$BirthWeight,ordered=FALSE)
+data_preeclampsia1$BirthWeight<-relevel(data_preeclampsia1$BirthWeight,ref="normal")
+logistics_preeclampsia1<-clogit(
+  case~BirthWeight+race+strata(subclass),
+  data=data_preeclampsia1
+)
+summary(logistics_preeclampsia1)
+data_gestationalhypertension<-data_gh0%>%
+  mutate(BirthWeight=case_when(
+    BirthWeight<2500~"low",
+    BirthWeight>=2500&BirthWeight<=2999~"lownormal",
+    BirthWeight>=3000&BirthWeight<=3499~"normal",
+    BirthWeight>=3500&BirthWeight<=4000~"highnormal",
+    BirthWeight>4000~"high"
+  ))
+table(data_gestationalhypertension$BirthWeight)
+data_gestationalhypertension$BirthWeight<-factor(data_gestationalhypertension$BirthWeight,ordered=FALSE)
+data_gestationalhypertension$BirthWeight<-relevel(data_gestationalhypertension$BirthWeight,ref="normal")
+logistics_gestationalhypertension<-clogit(
+  case~BirthWeight+strata(subclass),
+  data=data_gestationalhypertension
+)
+summary(logistics_gestationalhypertension)
+data_gestationalhypertension1<-data_gh1%>%
+  mutate(BirthWeight=case_when(
+    BirthWeight<2500~"low",
+    BirthWeight>=2500&BirthWeight<=2999~"lownormal",
+    BirthWeight>=3000&BirthWeight<=3499~"normal",
+    BirthWeight>=3500&BirthWeight<=4000~"highnormal",
+    BirthWeight>4000~"high"
+  ))
+table(data_gestationalhypertension1$BirthWeight)
+data_gestationalhypertension1$BirthWeight<-factor(data_gestationalhypertension1$BirthWeight,ordered=FALSE)
+data_gestationalhypertension1$BirthWeight<-relevel(data_gestationalhypertension1$BirthWeight,ref="normal")
+logistics_gestationalhypertension1<-clogit(
+  case~BirthWeight+race+strata(subclass),
+  data=data_gestationalhypertension1
+)
+summary(logistics_gestationalhypertension1)

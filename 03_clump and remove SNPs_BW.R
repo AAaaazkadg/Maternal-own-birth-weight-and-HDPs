@@ -33,4 +33,5 @@ BW_significiant_SEM_exposure_clumped <- clump_data(BW_significiant_SEM_exposure,
                                                    clump_r2 = 0.001, 
                                                    clump_p1 = 1,
                                                    clump_p2 = 1,pop="EUR")
+
 write.csv(BW_significiant_SEM_exposure_clumped,"BW_significiant_SEM_exposure_clumped.csv")
